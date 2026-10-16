@@ -1,0 +1,90 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - decorder
+    - embeddedstructfieldcheck
+    - errcheck
+    - errname
+    - errorlint
+    - exptostd
+    - funcorder
+    - gochecksumtype
+    - gocritic
+    - godot
+    - gomoddirectives
+    - gosec
+    - govet
+    - ineffassign
+    - iotamixing
+    - misspell
+    - modernize
+    - nilerr
+    - nilnesserr
+    - perfsprint
+    - predeclared
+    - protogetter
+    - staticcheck
+    - tagalign
+    - tagliatelle
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - whitespace
+
+  settings:
+    funcorder:
+      alphabetical: true
+      function: true
+
+    gochecksumtype:
+      default-signifies-exhaustive: true
+
+    godot:
+      capital: true
+      scope: noinline
+
+    gomoddirectives:
+      toolchain-forbidden: true
+
+    ineffassign:
+      check-escaping-errors: true
+
+    misspell:
+      locale: US
+
+    staticcheck:
+      checks:
+        - all
+
+    tagalign:
+      order:
+        - json
+        - yaml
+        - yml
+        - toml
+        - mapstructure
+        - binding
+        - validate
+        - env
+
+  exclusions:
+    paths:
+      - vendor/
+    presets:
+      - common-false-positives
+      - std-error-handling
+    rules:
+      # G101: test files use URLs with fake credentials as test data.
+      - path: _test\.go
+        linters:
+          - gosec
+        text: G101

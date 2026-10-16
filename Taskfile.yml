@@ -1,0 +1,86 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  GREETING: 'To view the list of available tasks, run the command: task -l'
+  RELEASE_BRANCH: main
+
+tasks:
+  cover:
+    desc: Run tests with coverage and print per-function coverage
+    cmds:
+      - go test -coverprofile=cover.out
+      - go tool cover -func=cover.out
+
+  default:
+    cmds:
+      - echo "{{.GREETING}}"
+    silent: true
+
+  lint:
+    preconditions:
+      - sh: type golangci-lint
+        msg: To run the task, install golangci-lint first or update your $PATH
+    cmd: golangci-lint run
+    silent: true
+
+  release:
+    desc: Prepare release (changelog, commit, tag), nothing is pushed
+    vars:
+      VERSION:
+        sh: |
+          v=$(git cliff --bumped-version 2>/dev/null)
+          case "$v" in v*) echo "$v" ;; *) echo "v$v" ;; esac
+      COMMIT_MSG: 'chore(release): prepare for {{.VERSION}}'
+    preconditions:
+      - sh: type git-cliff
+        msg: To run the task, install git-cliff first (see https://git-cliff.org/docs/installation/) or update your $PATH
+      - sh: test "$(git branch --show-current)" = "{{.RELEASE_BRANCH}}"
+        msg: 'Releases must be made from the {{.RELEASE_BRANCH}} branch'
+      - sh: test -z "$(git status --porcelain)"
+        msg: Working tree is not clean, commit or stash your changes first
+      - sh: echo "{{.VERSION}}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+'
+        msg: 'Bumped version "{{.VERSION}}" must look like vX.Y.Z (Go modules need the "v" prefix)'
+      - sh: '! git rev-parse -q --verify "refs/tags/{{.VERSION}}" >/dev/null'
+        msg: 'Tag {{.VERSION}} already exists (are there any unreleased changes?)'
+    cmds:
+      - git cliff --tag "{{.VERSION}}" --with-commit "{{.COMMIT_MSG}}" -o CHANGELOG.md
+      - git add CHANGELOG.md
+      - git commit -m "{{.COMMIT_MSG}}"
+      - git tag -a "{{.VERSION}}" -m "{{.VERSION}}"
+
+  release:push:
+    desc: Push the release commit and tag, then create a GitHub release
+    vars:
+      # The tag pointing at HEAD, created by `task release`. Empty if there is none.
+      VERSION:
+        sh: git describe --tags --exact-match HEAD 2>/dev/null || true
+    preconditions:
+      - sh: type git-cliff
+        msg: Install git-cliff first (https://git-cliff.org/docs/installation/)
+      - sh: gh auth status
+        msg: Install GitHub CLI and run `gh auth login` first (https://cli.github.com)
+      - sh: test -n "{{.VERSION}}"
+        msg: HEAD is not tagged. Run `task release` first, and don't add commits after it.
+      - sh: test "$(git branch --show-current)" = "{{.RELEASE_BRANCH}}"
+        msg: 'Releases must be pushed from the {{.RELEASE_BRANCH}} branch'
+      - sh: test -z "$(git status --porcelain)"
+        msg: Working tree is not clean
+      - sh: '! gh release view "{{.VERSION}}" >/dev/null 2>&1'
+        msg: 'GitHub release {{.VERSION}} already exists'
+    cmds:
+      - git push origin HEAD "{{.VERSION}}"
+      - git cliff --latest --strip header | gh release create "{{.VERSION}}" --verify-tag --title "{{.VERSION}}" -F -
+
+  release:all:
+    desc: Prepare, push and publish a release
+    cmds:
+      - task: release
+      - task: release:push
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test
+    silent: true
